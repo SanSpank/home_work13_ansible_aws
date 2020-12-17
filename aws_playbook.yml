@@ -1,0 +1,56 @@
+---
+- name: Create a instance
+  hosts: localhost
+  gather_facts: False
+  vars:
+    keypair: my-key15
+    instance_type: t2.micro
+    security_group: Ec2SecutiryGroup15
+    image: ami-0e1ce3e0deb8896d2
+    region: eu-central-1
+  tasks:
+    - name: Launch instance
+      ec2:
+         key_name: "{{ keypair }}"
+         group: "{{ security_group }}"
+         instance_type: "{{ instance_type }}"
+         image: "{{ image }}"
+         wait: true
+         region: "{{ region }}"
+      register: ec2
+
+    - name: Add new instance to host group
+      add_host:
+        name: "{{ item.public_ip }}"
+        groups: dev
+      loop: "{{ ec2.instances }}"
+    
+    - name: Pause for 5 minutes to build app cache
+      pause:
+        minutes: 5
+
+- name: Build app on instance
+  hosts: dev
+  remote_user: ubuntu
+  become: yes
+  tasks:
+  - name: Run the equivalent of "apt-get update" as a separate step
+    apt:
+      update_cache: yes
+
+  - name: install default-jdk and Maven
+    apt:
+      name: "{{ packages }}"
+    vars:
+      packages:
+      - default-jdk
+      - maven
+
+  - name: GIT Clone Boxfuse
+    git:
+      repo: 'https://github.com/boxfuse/boxfuse-sample-java-war-hello.git'
+      dest: /tmp/skawap/
+
+  - name: maven package war
+    command: mvn -f /tmp/skawap/pom.xml clean package
+    become: yes
